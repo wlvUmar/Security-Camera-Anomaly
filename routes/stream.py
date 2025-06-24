@@ -8,7 +8,6 @@ from starlette.websockets import WebSocketState
 from models.dataset import SecurityCameraDataset
 from utils import get_from_state
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 stream_router = APIRouter(prefix="/stream", tags=["Stream"])
@@ -41,11 +40,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 "anomaly_reasons": result.get('anomaly_reasons', []),
                 "frame_number": vp.processed_frames
             }
+            logger.debug(response)
+            # if 'anomaly_id' in result:
+            #     response['anomaly_id'] = result['anomaly_id']
             
-            if 'anomaly_id' in res ult:
-                response['anomaly_id'] = result['anomaly_id']
-            
-            await websocket.send_json(response)
+            # await websocket.send_json(response)
             
     except Exception as e:
         logger.error(f"WebSocket error: {e}")

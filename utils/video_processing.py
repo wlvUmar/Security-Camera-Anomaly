@@ -1,6 +1,10 @@
 import numpy as np 
 from fastapi import Request, Depends
 from typing import Union, Callable
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     def __init__(self, app_state):

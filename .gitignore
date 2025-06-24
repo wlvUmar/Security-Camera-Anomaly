@@ -3,3 +3,5 @@
 /routes/__pycache__
 /utils/__pycache__
 utils/yolov8s.pt
+TODO.txt
+/logs

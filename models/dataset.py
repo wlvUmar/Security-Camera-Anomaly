@@ -164,11 +164,9 @@ class StreamDataset:
         self.timestamps = []
     
     def add_frame(self, frame: np.ndarray, label: str = None, timestamp: float = None):
-        """Add a new frame to the streaming buffer"""
         if timestamp is None:
             timestamp = time.time()
         
-        # Convert BGR to RGB if needed
         if len(frame.shape) == 3 and frame.shape[2] == 3:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
@@ -176,14 +174,12 @@ class StreamDataset:
         self.labels_buffer.append(label)
         self.timestamps.append(timestamp)
         
-        # Maintain buffer size
         if len(self.frame_buffer) > self.buffer_size:
             self.frame_buffer.pop(0)
             self.labels_buffer.pop(0)
             self.timestamps.pop(0)
     
     def get_recent_frames(self, count: int = 10) -> List[Dict]:
-        """Get the most recent frames"""
         recent_count = min(count, len(self.frame_buffer))
         recent_frames = []
         

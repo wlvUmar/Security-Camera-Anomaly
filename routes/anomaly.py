@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, HTTPException, Query, Depends
-from utils import AnomalyStorage, TimeFrameManager, get_from_state
+from utils import TimeFrameManager, get_from_state
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ async def get_anomalies(
     limit: Optional[int] = Query(50, ge=1, le=1000),
     timeframe: Optional[str] = Query(None, regex="^(1h|6h|12h|24h|7d|30d)$"),
     label_filter: Optional[str] = Query(None),
-    storage: AnomalyStorage = Depends(get_from_state("anomaly_storage"))
+    storage = Depends(get_from_state("anomaly_storage"))
 ):
     try:
         since_timestamp = None
@@ -43,7 +43,7 @@ async def get_anomalies(
         raise HTTPException(status_code=500, detail=str(e))
 
 @anomaly_router.get("/{anomaly_id}")
-async def get_anomaly_details(anomaly_id: str, storage:AnomalyStorage = Depends(get_from_state("anomaly_storage"))):
+async def get_anomaly_details(anomaly_id: str, storage = Depends(get_from_state("anomaly_storage"))):
     """Get detailed information about a specific anomaly"""
     try:
         anomaly = storage.get_anomaly_by_id(anomaly_id)
@@ -59,7 +59,7 @@ async def get_anomaly_details(anomaly_id: str, storage:AnomalyStorage = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @anomaly_router.get("/stats/summary")
-async def get_anomaly_stats(as_and_vp: AnomalyStorage = Depends(get_from_state("anomaly_storage", "video_processor"))):
+async def get_anomaly_stats(as_and_vp = Depends(get_from_state("anomaly_storage", "video_processor"))):
     """Get anomaly statistics and summary"""
     try:
         storage, vp = as_and_vp
@@ -91,7 +91,7 @@ async def get_anomaly_stats(as_and_vp: AnomalyStorage = Depends(get_from_state("
         raise HTTPException(status_code=500, detail=str(e))
 
 @anomaly_router.delete("/")
-async def clear_anomalies(storage: AnomalyStorage = Depends(get_from_state("anomaly_storage"))):
+async def clear_anomalies(storage = Depends(get_from_state("anomaly_storage"))):
     try:
         storage.clear_all()
         return {"message": "All anomalies cleared successfully"}
@@ -102,7 +102,7 @@ async def clear_anomalies(storage: AnomalyStorage = Depends(get_from_state("anom
 
 
 @anomaly_router.post("/export")
-async def export_anomalies(storage: AnomalyStorage = Depends(get_from_state("anomaly_storage"))):
+async def export_anomalies(storage = Depends(get_from_state("anomaly_storage"))):
     try:
         data = {
             'export_timestamp': time.time(),
@@ -123,3 +123,4 @@ async def export_anomalies(storage: AnomalyStorage = Depends(get_from_state("ano
     except Exception as e:
         logger.error(f"Error exporting anomalies: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+ 

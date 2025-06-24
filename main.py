@@ -6,9 +6,12 @@ from fastapi.responses import HTMLResponse
 
 from models.anomaly_detector import AnomalyDetector
 from models.dataset import StreamDataset
-from utils import AnomalyStorage, VideoProcessor, get_from_state
+from utils import AnomalyStorage, VideoProcessor, get_from_state, setup_logging
 from routes import anomaly_router, stream_router
-logging.basicConfig(level=logging.INFO)
+
+setup_logging("logs/app.log")
+
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Security Camera Anomaly Detector", version="1.0.0")

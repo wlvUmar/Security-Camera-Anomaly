@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -16,27 +15,40 @@
   <div id="log"></div>
 
   <script>
-    const ws = new WebSocket("wss://8a28-213-206-61-87.ngrok-free.app/stream/video"); 
-
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
     const log = msg => {
       const logBox = document.getElementById("log");
       logBox.textContent += `${msg}\n`;
       logBox.scrollTop = logBox.scrollHeight;
     };
 
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-
+    let ws = null;
+    let reconnectInterval = 3000;
     let frameCount = 0;
     let lastTime = Date.now();
 
-    ws.onopen = () => log("✅ WebSocket connected");
-    ws.onerror = err => log("❌ WebSocket error: " + err.message);
-    ws.onmessage = msg => log("📩 Server: " + msg.data);
+    const connectWebSocket = () => {
+      ws = new WebSocket("wss://4a9b-188-113-230-65.ngrok-free.app/stream/video");
 
-    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-      video.srcObject = stream;
+      ws.onopen = () => {
+        log("✅ WebSocket connected");
+        startSendingFrames();
+      };
+
+      ws.onerror = err => log("❌ WebSocket error: " + err.message);
+
+      ws.onclose = () => {
+        log("🔌 WebSocket closed. Reconnecting in 3s...");
+        setTimeout(connectWebSocket, reconnectInterval);
+      };
+
+      // ws.onmessage = msg => log("📩 Server: " + msg.data);
+    };
+
+    const startSendingFrames = () => {
+      if (!video.srcObject) return;
 
       const sendFrame = () => {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -51,15 +63,20 @@
                 frameCount = 0;
                 lastTime = now;
               }
-              requestAnimationFrame(sendFrame); // aim for max FPS
+              requestAnimationFrame(sendFrame);
             });
           } else {
             requestAnimationFrame(sendFrame);
           }
-        }, 'image/jpeg', 0.4); 
+        }, 'image/jpeg', 0.4);
       };
 
       requestAnimationFrame(sendFrame);
+    };
+
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      video.srcObject = stream;
+      connectWebSocket();
     }).catch(err => {
       log("❌ Camera access error: " + err.message);
     });
