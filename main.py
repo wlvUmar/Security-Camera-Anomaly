@@ -2,6 +2,7 @@ import logging
 
 from fastapi import FastAPI, Depends 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from models.anomaly_detector import AnomalyDetector
 from models.dataset import StreamDataset
@@ -66,6 +67,10 @@ async def health_check(all_states: AnomalyDetector = Depends(get_from_state("ano
         return {"status": "unhealthy", "error": str(e)}
 
 
+@app.get("/page")
+async def serve_html():
+    with open("index.html", "r") as f:
+        return HTMLResponse(f.read())
 
-app.include_router(anomaly_router)
 app.include_router(stream_router)
+app.include_router(anomaly_router)

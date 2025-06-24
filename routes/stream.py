@@ -4,6 +4,7 @@ import logging
 import numpy as np
 
 from fastapi import APIRouter, WebSocket, UploadFile, File, HTTPException, Query, Depends
+from starlette.websockets import WebSocketState
 from models.dataset import SecurityCameraDataset
 from utils import get_from_state
 
@@ -24,11 +25,12 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_bytes()
             
             nparr = np.frombuffer(data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if frame is None:
-                await websocket.send_json({"error": "Invalid frame data"})
-                continue
+            try:
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if frame is None:
+                    raise ValueError("Frame decode failed")
+            except Exception as e:
+                logger.error(f"Decode error: {e}")
             
             result = await vp.process_frame(frame)
             
@@ -40,7 +42,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "frame_number": vp.processed_frames
             }
             
-            if 'anomaly_id' in result:
+            if 'anomaly_id' in res ult:
                 response['anomaly_id'] = result['anomaly_id']
             
             await websocket.send_json(response)
@@ -48,8 +50,10 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
+        logger.info(f"Connection state before close: {websocket.application_state}")
+        if websocket.application_state != WebSocketState.DISCONNECTED:
+            await websocket.close()
         logger.info("WebSocket connection closed")
-        await websocket.close()
 
 
 @stream_router.get("/recent")

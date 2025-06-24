@@ -11,7 +11,6 @@ class VideoProcessor:
         self.total_anomalies = 0
 
     async def process_frame(self, frame: np.ndarray) -> dict:
-        """Process a single frame for anomaly detection"""
         try:
             self.processed_frames += 1
             

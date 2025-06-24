@@ -63,7 +63,7 @@ async def get_anomaly_stats(as_and_vp: AnomalyStorage = Depends(get_from_state("
     """Get anomaly statistics and summary"""
     try:
         storage, vp = as_and_vp
-        stats = anomaly_storage.get_stats()
+        stats = storage.get_stats()
         
         recent_anomalies = storage.get_anomalies(
             since_timestamp=TimeFrameManager.get_timeframe_start('24h')

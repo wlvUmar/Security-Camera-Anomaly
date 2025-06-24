@@ -1,0 +1,68 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Fast Camera Stream</title>
+  <style>
+    video { width: 100%; max-width: 400px; }
+    canvas { display: none; }
+    #log { white-space: pre-wrap; font-family: monospace; background: #eee; padding: 10px; margin-top: 10px; height: 150px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h2>📷 Streaming Camera at ~30 FPS</h2>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="log"></div>
+
+  <script>
+    const ws = new WebSocket("wss://8a28-213-206-61-87.ngrok-free.app/stream/video"); 
+
+    const log = msg => {
+      const logBox = document.getElementById("log");
+      logBox.textContent += `${msg}\n`;
+      logBox.scrollTop = logBox.scrollHeight;
+    };
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    let frameCount = 0;
+    let lastTime = Date.now();
+
+    ws.onopen = () => log("✅ WebSocket connected");
+    ws.onerror = err => log("❌ WebSocket error: " + err.message);
+    ws.onmessage = msg => log("📩 Server: " + msg.data);
+
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      video.srcObject = stream;
+
+      const sendFrame = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(blob => {
+          if (blob && ws.readyState === WebSocket.OPEN) {
+            blob.arrayBuffer().then(buffer => {
+              ws.send(buffer);
+              frameCount++;
+              const now = Date.now();
+              if (now - lastTime >= 1000) {
+                log(`📤 FPS: ${frameCount}`);
+                frameCount = 0;
+                lastTime = now;
+              }
+              requestAnimationFrame(sendFrame); // aim for max FPS
+            });
+          } else {
+            requestAnimationFrame(sendFrame);
+          }
+        }, 'image/jpeg', 0.4); 
+      };
+
+      requestAnimationFrame(sendFrame);
+    }).catch(err => {
+      log("❌ Camera access error: " + err.message);
+    });
+  </script>
+</body>
+</html>
