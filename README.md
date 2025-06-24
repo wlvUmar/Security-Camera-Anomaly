@@ -17,8 +17,8 @@ A scalable system for detecting anomalies in security camera feeds using YOLOv8 
 
 ```bash
 # Clone the repository
-git clone <your-repo>
-cd security_camera_anomaly
+git clone https://github.com/wlvUmar/Security-Camera-Anomaly.git
+cd Security-Camera-Anomaly
 
 # Install dependencies
 pip install -r requirements.txt
