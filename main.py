@@ -1,12 +1,16 @@
-from fastapi import FastAPI, WebSocket, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-import cv2
-import numpy as np
-import asyncio
-from typing import List
-import json
+import logging
 
-app = FastAPI(title="Security Camera Anomaly Detector")
+from fastapi import FastAPI, Depends 
+from fastapi.middleware.cors import CORSMiddleware
+
+from models.anomaly_detector import AnomalyDetector
+from models.dataset import StreamDataset
+from utils import AnomalyStorage, VideoProcessor, get_from_state
+from routes import anomaly_router, stream_router
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Security Camera Anomaly Detector", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,57 +20,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class VideoProcessor:
-    def __init__(self):
-        self.anomaly_threshold = 0.8
-        self.detected_anomalies = []
 
-    async def process_frame(self, frame: np.ndarray) -> dict:
-        # TODO: Implement actual anomaly detection logic
-        # This is a placeholder that simulates anomaly detection
-        is_anomaly = np.random.random() > self.anomaly_threshold
-        if is_anomaly:
-            self.detected_anomalies.append({
-                "timestamp": str(asyncio.get_event_loop().time()),
-                "confidence": float(np.random.random())
-            })
-        return {"is_anomaly": is_anomaly}
 
-video_processor = VideoProcessor()
+@app.on_event("startup")
+async def startup():
+    
+    try:
+        logger.info("Initializing anomaly detector...")
+        app.state.anomaly_detector = AnomalyDetector()
+
+        logger.info("Initializing anomaly storage...")
+        app.state.anomaly_storage = AnomalyStorage(max_items=5000, retention_hours=48)
+        app.state.stream_dataset = StreamDataset(buffer_size=200)
+        app.state.video_processor = VideoProcessor(app.state)
+
+        logger.info("Application startup completed successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {e}")
+        raise
+
 
 @app.get("/")
-async def root():
-    return {"status": "active", "service": "Security Camera Anomaly Detector"}
+async def root(vp: VideoProcessor = Depends(get_from_state("video_processor"))):
+    return {
+        "status": "running",
+        "service": "Security Camera Anomaly Detector",
+        "version": "1.0.0",
+        "processed_frames": vp.processed_frames,
+        "total_anomalies": vp.total_anomalies
+    }
 
-@app.websocket("/ws/video")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
+@app.get("/health")
+async def health_check(all_states: AnomalyDetector = Depends(get_from_state("anomaly_detector", "anomaly_storage", "stream_dataset"))):
     try:
-        while True:
-            data = await websocket.receive_bytes()
-            nparr = np.frombuffer(data, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            result = await video_processor.process_frame(frame)
-            await websocket.send_json(result)
+        detector , storage, stream_dataset = all_states
+        stats = storage.get_stats()
+
+        return {
+            "status": "healthy",
+            "anomaly_detector": "initialized" if detector else "not_initialized",
+            "storage": stats,
+            "stream_buffer_size": len(stream_dataset)
+        }
     except Exception as e:
-        print(f"WebSocket error: {e}")
-    finally:
-        await websocket.close()
+        return {"status": "unhealthy", "error": str(e)}
 
-@app.post("/upload/video")
-async def upload_video(file: UploadFile = File(...)):
-    contents = await file.read()
-    nparr = np.frombuffer(contents, np.uint8)
-    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    result = await video_processor.process_frame(frame)
-    return result
 
-@app.get("/anomalies")
-async def get_anomalies():
-    return {"anomalies": video_processor.detected_anomalies}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+app.include_router(anomaly_router)
+app.include_router(stream_router)
