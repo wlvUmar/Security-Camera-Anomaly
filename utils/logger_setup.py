@@ -4,7 +4,7 @@ from colorlog import ColoredFormatter
 
 LOG_FORMAT_COLORED = "\033[37m%(asctime)s [%(log_color)s%(levelname)s%(reset)s\033[37m] %(name)s: %(message)s"
 LOG_FORMAT_PLAIN = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 
 def setup_logging(log_file: str = "app.log"):
     color_formatter = ColoredFormatter(
@@ -27,7 +27,7 @@ def setup_logging(log_file: str = "app.log"):
 
     file_handler = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=3)
     file_handler.setFormatter(plain_formatter)
-    file_handler.setLevel(LOG_LEVEL)
+    file_handler.setLevel(logging.WARNING)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(LOG_LEVEL)
@@ -53,3 +53,4 @@ def setup_logging(log_file: str = "app.log"):
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("models.anomaly_detector").setLevel(logging.DEBUG)

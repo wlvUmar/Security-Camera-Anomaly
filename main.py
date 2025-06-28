@@ -1,13 +1,13 @@
 import logging
-
+import asyncio
 from fastapi import FastAPI, Depends 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from models.anomaly_detector import AnomalyDetector
 from models.dataset import StreamDataset
-from utils import AnomalyStorage, VideoProcessor, get_from_state, setup_logging
-from routes import anomaly_router, stream_router
+from utils import AnomalyStorage, VideoProcessor, get_from_state, setup_logging, run_video_processing
+from routes import anomaly_router
 
 setup_logging("logs/app.log")
 
@@ -15,16 +15,7 @@ setup_logging("logs/app.log")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Security Camera Anomaly Detector", version="1.0.0")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
+app.include_router(anomaly_router)
 
 @app.on_event("startup")
 async def startup():
@@ -38,21 +29,13 @@ async def startup():
         app.state.stream_dataset = StreamDataset(buffer_size=200)
         app.state.video_processor = VideoProcessor(app.state)
 
+        asyncio.create_task(run_video_processing(app.state.video_processor))
+
         logger.info("Application startup completed successfully")
     except Exception as e:
         logger.error(f"Failed to initialize application: {e}")
         raise
 
-
-@app.get("/")
-async def root(vp: VideoProcessor = Depends(get_from_state("video_processor"))):
-    return {
-        "status": "running",
-        "service": "Security Camera Anomaly Detector",
-        "version": "1.0.0",
-        "processed_frames": vp.processed_frames,
-        "total_anomalies": vp.total_anomalies
-    }
 
 @app.get("/health")
 async def health_check(all_states: AnomalyDetector = Depends(get_from_state("anomaly_detector", "anomaly_storage", "stream_dataset"))):
@@ -70,10 +53,28 @@ async def health_check(all_states: AnomalyDetector = Depends(get_from_state("ano
         return {"status": "unhealthy", "error": str(e)}
 
 
-@app.get("/page")
+@app.get("/")
 async def serve_html():
     with open("index.html", "r") as f:
         return HTMLResponse(f.read())
 
-app.include_router(stream_router)
-app.include_router(anomaly_router)
+
+
+
+# @app.get("/")
+# async def root(vp: VideoProcessor = Depends(get_from_state("video_processor"))):
+#     return {
+#         "status": "running",
+#         "service": "Security Camera Anomaly Detector",
+#         "version": "1.0.0",
+#         "processed_frames": vp.processed_frames,
+#         "total_anomalies": vp.total_anomalies
+#     }
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )

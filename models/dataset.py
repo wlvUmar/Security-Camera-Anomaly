@@ -1,4 +1,3 @@
-# models/dataset.py
 import torch
 from torch.utils.data import Dataset
 import cv2
@@ -28,18 +27,15 @@ class SecurityCameraDataset(Dataset):
         self._load_data()
     
     def _load_data(self):
-        """Load all data files from the data path"""
         if not self.data_path.exists():
             print(f"Warning: Data path {self.data_path} does not exist")
             return
         
-        # Load video files
         for ext in self.video_extensions:
             video_files = list(self.data_path.glob(f"*{ext}"))
             for video_file in video_files:
                 self._extract_frames_from_video(video_file)
-        
-        # Load image files
+
         for ext in self.image_extensions:
             image_files = list(self.data_path.glob(f"*{ext}"))
             for image_file in image_files:
@@ -50,7 +46,7 @@ class SecurityCameraDataset(Dataset):
                 })
     
     def _extract_frames_from_video(self, video_path: Path, frame_skip: int = 5):
-        """Extract frames from video file"""
+
         cap = cv2.VideoCapture(str(video_path))
         frame_count = 0
         
@@ -59,15 +55,10 @@ class SecurityCameraDataset(Dataset):
             if not ret:
                 break
             
-            # Skip frames to reduce dataset size
             if frame_count % frame_skip == 0:
                 frame_filename = f"{video_path.stem}_frame_{frame_count:06d}.jpg"
                 frame_path = self.data_path / "extracted_frames" / frame_filename
-                
-                # Create directory if it doesn't exist
                 frame_path.parent.mkdir(exist_ok=True)
-                
-                # Save frame
                 cv2.imwrite(str(frame_path), frame)
                 
                 self.data_items.append({
@@ -83,10 +74,6 @@ class SecurityCameraDataset(Dataset):
         cap.release()
     
     def _get_label(self, file_path: Path) -> Optional[str]:
-        """
-        Get label for a file. 
-        First checks for existing label file, otherwise returns None for auto-labeling
-        """
         label_file = file_path.with_suffix('.json')
         if label_file.exists():
             try:
@@ -95,7 +82,7 @@ class SecurityCameraDataset(Dataset):
                     return label_data.get('anomaly_label', 'normal')
             except:
                 pass
-        return None  # Will be auto-labeled using YOLOv8
+        return None 
     
     def __len__(self):
         return len(self.data_items)
@@ -103,16 +90,12 @@ class SecurityCameraDataset(Dataset):
     def __getitem__(self, idx):
         item = self.data_items[idx]
         
-        # Load image
         image = cv2.imread(item['path'])
         if image is None:
-            # Return a dummy image if loading fails
             image = np.zeros((480, 640, 3), dtype=np.uint8)
         
-        # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         
-        # Apply transforms if any
         if self.transform:
             image = self.transform(image)
         
@@ -128,7 +111,6 @@ class SecurityCameraDataset(Dataset):
         }
     
     def get_unlabeled_items(self) -> List[int]:
-        """Return indices of items that need labeling"""
         unlabeled_indices = []
         for i, item in enumerate(self.data_items):
             if item.get('label') is None:
@@ -136,7 +118,6 @@ class SecurityCameraDataset(Dataset):
         return unlabeled_indices
     
     def update_label(self, idx: int, label: str):
-        """Update label for a specific item"""
         if 0 <= idx < len(self.data_items):
             self.data_items[idx]['label'] = label
             
@@ -154,9 +135,6 @@ class SecurityCameraDataset(Dataset):
                 json.dump(label_data, f, indent=2)
 
 class StreamDataset:
-    """
-    Dataset class for handling streaming data (live camera feeds)
-    """
     def __init__(self, buffer_size: int = 100):
         self.buffer_size = buffer_size
         self.frame_buffer = []
