@@ -25,10 +25,7 @@ class AnomalyStorage:
                      confidence: float,
                      timestamp: Optional[float] = None,
                      metadata: Optional[Dict] = None) -> str:
-        """
-        Store an anomaly detection result
-        Returns: anomaly_id for reference
-        """
+
         if timestamp is None:
             timestamp = time.time()
         
@@ -52,9 +49,6 @@ class AnomalyStorage:
                      limit: Optional[int] = None,
                      since_timestamp: Optional[float] = None,
                      label_filter: Optional[str] = None) -> List[Dict]:
-        """
-        Retrieve anomalies with optional filtering
-        """
         with self.lock:
                 filtered_anomalies = list(self.anomalies)
         
@@ -109,12 +103,10 @@ class AnomalyStorage:
         }
     
     def clear_all(self):
-        """Clear all stored anomalies"""
         with self.lock:
             self.anomalies.clear()
     
     def export_to_json(self, filepath: str):
-        """Export all anomalies to JSON file"""
         with self.lock:
             data = {
                 'export_timestamp': time.time(),

@@ -4,22 +4,19 @@ from pathlib import Path
 
 class Settings:
     
-    # Model settings
     YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "./utils/yolov8s.pt")
+    MODEL_PATH = os.getenv("MODEL_PATH", "./model.pth")
     ANOMALY_THRESHOLD = float(os.getenv("ANOMALY_THRESHOLD", "0.7"))
     MOTION_THRESHOLD = int(os.getenv("MOTION_THRESHOLD", "50"))
     SPEED_THRESHOLD = int(os.getenv("SPEED_THRESHOLD", "100"))
 
-    # Storage settings
     MAX_STORAGE_ITEMS = int(os.getenv("MAX_STORAGE_ITEMS", "5000"))
     RETENTION_HOURS = int(os.getenv("RETENTION_HOURS", "48"))
     STREAM_BUFFER_SIZE = int(os.getenv("STREAM_BUFFER_SIZE", "200"))
 
-    # Data paths
     DATA_PATH = os.getenv("DATA_PATH", "./utils/data")
     EXPORT_PATH = os.getenv("EXPORT_PATH", "./utils/exports")
 
-    # Server settings
     HOST = os.getenv("HOST", "0.0.0.0")
     PORT = int(os.getenv("PORT", "8000"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "info")

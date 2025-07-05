@@ -1,12 +1,11 @@
-import torch
-import torch.nn as nn
-import numpy as np
-from ultralytics import YOLO
-from typing import Dict, List, Tuple
 import cv2
-from collections import deque, defaultdict, Counter
 import time
 import logging
+import numpy as np
+from typing import List
+from ultralytics import YOLO
+from collections import deque, defaultdict
+from model import predict_video_anomaly
 
 logger = logging.getLogger(__name__)
 logger.info(__name__)
@@ -16,6 +15,8 @@ class AnomalyDetector:
     def __init__(self, model_path: str = "utils/yolov8s.pt"):
         self.yolo_model = YOLO(model_path)
         self.speed_ratio = 2.0
+        self.stride = 30
+        self.sequence_length = 150
         self.distance_ratio = 0.5
         self.trajectory_memory = 30
         self.object_tracks = {}
@@ -23,103 +24,46 @@ class AnomalyDetector:
         self.anomaly_memory = defaultdict(lambda: deque(maxlen=5))
         self.allowed_objects = {"person", "chair", "tv"}
 
-    def extract_features(self, frame: np.ndarray) -> Dict:
-        results = self.yolo_model(frame, verbose=False)
+    def process_stream(self, rtsp_url, threshold=0.5):
+        cap = cv2.VideoCapture(rtsp_url)
+        if not cap.isOpened():
+            print(f"Warning: Could not open {rtsp_url}")
+            return
 
-        features = {
-            'objects': [],
-            'total_objects': 0,
-            'frame_timestamp': time.time()
-        }
+        frames = []
+        frame_count = 0
+        sequence_length = self.sequence_length
+        stride = self.stride
+        overlap = sequence_length // 2
 
-        if results and len(results) > 0:
-            result = results[0]
-            if result.boxes is not None:
-                boxes = result.boxes.xyxy.cpu().numpy()
-                classes = result.boxes.cls.cpu().numpy()
-                confidences = result.boxes.conf.cpu().numpy()
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Stream ended or failed. Reopening...")
+                cap.release()
+                time.sleep(2)  
+                cap = cv2.VideoCapture(rtsp_url)
+                continue
 
-                for i, (box, clas, conf) in enumerate(zip(boxes, classes, confidences)):
-                    x1, y1, x2, y2 = box
-                    center_x = (x1 + x2) / 2
-                    center_y = (y1 + y2) / 2
+            if frame_count % stride == 0:
+                frame = cv2.resize(frame, (640, 480))
+                frames.append(frame)
 
-                    obj_data = {
-                        'id': i,
-                        'class': int(clas),
-                        'class_name': self.yolo_model.names[int(clas)],
-                        'confidence': float(conf),
-                        'bbox': [float(x1), float(y1), float(x2), float(y2)],
-                        'center': [float(center_x), float(center_y)],
-                        'area': float((x2 - x1) * (y2 - y1))
-                    }
-                    features['objects'].append(obj_data)
+            frame_count += 1
 
-                features['total_objects'] = len(features['objects'])
-        logger.debug(f"Detected {features['total_objects']} objects.")
+            while len(frames) >= sequence_length:
+                sequence_frames = frames[:sequence_length]
 
-        return features
+                results = predict_video_anomaly(sequence_frames, threshold=threshold)
 
-    def calculate_motion(self, current_features: Dict, frame_shape: Tuple) -> Dict:
-        motion_data = {
-            'total_motion': 0,
-            'anomalous_objects': [],
-            'motion_intensity': 0
-        }
+                yield {
+                    'start_frame': frame_count - len(frames),
+                    'end_frame': frame_count - len(frames) + sequence_length,
+                    'anomaly_results': results
+                }
 
-        if len(self.frame_buffer) < 2:
-            self.frame_buffer.append(current_features)
-            return motion_data
+                frames = frames[overlap:]
 
-        prev_features = self.frame_buffer[-1]
-        time_diff = current_features['frame_timestamp'] - \
-            prev_features['frame_timestamp']
-
-        if time_diff <= 0:
-            return motion_data
-
-        total_motion_pixels = 0
-
-        for curr_obj in current_features['objects']:
-            curr_center = curr_obj['center']
-            curr_box = curr_obj['bbox']  # [x1, y1, x2, y2]
-            box_w = curr_box[2] - curr_box[0]
-            box_h = curr_box[3] - curr_box[1]
-            obj_diag = (box_w ** 2 + box_h ** 2) ** 0.5
-
-            distance_threshold = self.distance_ratio * obj_diag
-            speed_threshold = self.speed_ratio * obj_diag / time_diff
-
-            min_distance = float('inf')
-            matched_obj = None
-
-            for prev_obj in prev_features['objects']:
-                if prev_obj['class'] == curr_obj['class']:
-                    prev_center = prev_obj['center']
-                    distance = np.sqrt((curr_center[0] - prev_center[0])**2 +
-                                       (curr_center[1] - prev_center[1])**2)
-                    if distance < min_distance:
-                        min_distance = distance
-                        matched_obj = prev_obj
-
-            if matched_obj and min_distance < distance_threshold:
-                speed = min_distance / time_diff
-                total_motion_pixels += min_distance
-
-                if speed > speed_threshold:
-                    motion_data['anomalous_objects'].append({
-                        'object': curr_obj,
-                        'speed': speed,
-                        'distance_moved': min_distance,
-                        'anomaly_type': 'high_speed'
-                    })
-
-        motion_data['total_motion'] = total_motion_pixels
-        motion_data['motion_intensity'] = total_motion_pixels / \
-            (frame_shape[0] * frame_shape[1])
-
-        self.frame_buffer.append(current_features)
-        return motion_data
 
     def get_unexpected_objects(self) -> List[str]:
         unexpected = set()
@@ -135,75 +79,7 @@ class AnomalyDetector:
 
         return list(unexpected)
 
-    def detect_covered(self, frame: np.ndarray, base_threshold: float = 50.0) -> np.bool:
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        edge = cv2.Canny(gray, 50, 150)
-        std_dev = np.std(gray)
-        edge_density = np.sum(edge > 0) / gray.size
-        is_covered = std_dev < 10 and edge_density < 0.01
-        logger.debug(f"std: {std_dev}, edge_density: {edge_density}")
-        return is_covered
-
-    def detect_anomaly(self, frame: np.ndarray) -> Dict:
+   
+    def detect_anomaly(self, frame: np.ndarray):
         timestamp = time.time()
-        is_covered = self.detect_covered(frame)
-        self.anomaly_memory["covered"].append(is_covered)
-        if sum(self.anomaly_memory["covered"]) >= 3:
-            return {
-                'is_anomaly': True,
-                'confidence': 1.0,
-                'anomaly_reasons': [f"Camera is covered"],
-                'features': None,
-                'motion_data': None,
-                'timestamp': timestamp
-            }
-
-        features = self.extract_features(frame)
-        motion_data = self.calculate_motion(features, frame.shape[:2])
-        unallowed = set(self.get_unexpected_objects())
-        self.anomaly_memory["unallowed_objects"].append(unallowed)
-        flat = [cls for frame_objs in self.anomaly_memory["unallowed_objects"]
-                for cls in frame_objs]
-        counts = Counter(flat)
-
-        persistent_unallowed = [cls for cls,
-                                count in counts.items() if count >= 3]
-
-        reasons = []
-
-        if persistent_unallowed:
-            logger.warning(f"Unexpected objects detected: {persistent_unallowed}")
-            reasons.append(f"Unallowed objects detected: {', '.join(persistent_unallowed)}")
-
-        self.anomaly_memory["unusual_movement"].append(
-            bool(motion_data["anomalous_objects"]))
-        self.anomaly_memory["intense_motion"].append(
-            motion_data["motion_intensity"] > 0.1)
-
-        if sum(self.anomaly_memory["unusual_movement"]) >= 3:
-            logger.warning("Unusual object movement detected")
-            reasons.append("Unusual object movement detected")
-
-        if sum(self.anomaly_memory["intense_motion"]) >= 3:
-            logger.warning("High motion intensity")
-            reasons.append("High motion intensity")
-
-        is_anomaly = bool(reasons)
-        if features['objects']:
-            avg_conf = np.mean([obj['confidence']
-                                for obj in features['objects']])
-        else:
-            avg_conf = 0.0
-        motion_score = motion_data['motion_intensity']
-        confidence = min(1.0, 0.5 * avg_conf + 0.5 * motion_score * 2)
-        if motion_data['motion_intensity'] > 0:
-            confidence = min(1.0, motion_data['motion_intensity'] * 2)
-
-        return {
-            'is_anomaly': is_anomaly,
-            'confidence': confidence,
-            'anomaly_reasons': reasons,
-            'features': features,
-            'motion_data': motion_data,
-            'timestamp': timestamp
-        }
+        

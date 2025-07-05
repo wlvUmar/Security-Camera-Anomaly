@@ -28,7 +28,7 @@ async def startup():
         app.state.anomaly_storage = AnomalyStorage(max_items=5000, retention_hours=48)
         app.state.stream_dataset = StreamDataset(buffer_size=200)
         app.state.video_processor = VideoProcessor(app.state)
-
+        app.state.model = app.state.video_processor.model 
         asyncio.create_task(run_video_processing(app.state.video_processor))
 
         logger.info("Application startup completed successfully")
@@ -38,7 +38,7 @@ async def startup():
 
 
 @app.get("/health")
-async def health_check(all_states: AnomalyDetector = Depends(get_from_state("anomaly_detector", "anomaly_storage", "stream_dataset"))):
+async def health_check(all_states = Depends(get_from_state("anomaly_detector", "anomaly_storage", "stream_dataset"))):
     try:
         detector , storage, stream_dataset = all_states
         stats = storage.get_stats()

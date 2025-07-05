@@ -1,11 +1,12 @@
-import torch
-from torch.utils.data import Dataset
-import cv2
-import numpy as np
-from typing import List, Dict, Optional, Union
 import os
+import cv2
 import json
+import time
+import torch
+import numpy as np
 from pathlib import Path
+from torch.utils.data import Dataset
+from typing import List, Dict, Optional, Union
 
 class SecurityCameraDataset(Dataset):
     def __init__(self, 
@@ -141,7 +142,7 @@ class StreamDataset:
         self.labels_buffer = []
         self.timestamps = []
     
-    def add_frame(self, frame: np.ndarray, label: str = None, timestamp: float = None):
+    def add_frame(self, frame: np.ndarray, label = None, timestamp = None):
         if timestamp is None:
             timestamp = time.time()
         

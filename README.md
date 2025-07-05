@@ -4,8 +4,8 @@ A scalable system for detecting anomalies in security camera feeds using YOLOv8 
 
 ## Features
 
-- **Real-time Processing**: WebSocket support for live video streams
-- **Motion Tracking**: Advanced motion detection and speed analysis
+- **Real-time Processing**: via CCTV / RTSP streams
+- **Deep Learnng**: Advanced per object attention model  
 - **Automatic Labeling**: Uses YOLOv8 for feature extraction and labeling
 - **Temporal Storage**: Thread-safe storage with configurable retention
 - **RESTful API**: Complete API for frame upload and anomaly retrieval
@@ -35,15 +35,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 #### Health Check
 ```bash
-curl http://localhost:8000/
 curl http://localhost:8000/health
-```
-
-#### Upload Frame
-```bash
-curl -X POST "http://localhost:8000/upload/frame" \
-     -H "Content-Type: multipart/form-data" \
-     -F "file=@your_image.jpg"
 ```
 
 #### Get Anomalies
@@ -62,14 +54,14 @@ curl http://localhost:8000/anomalies/stats/summary
 
 ### Core Components
 
-1. **AnomalyDetector** (`models/anomaly_detector.py`)
-   - YOLOv8-based feature extraction
-   - Motion tracking and speed analysis
+1. **Video Processor** (`utils/video_processor.py`)
+   - processes streamed data
    - Configurable thresholds
 
-2. **Dataset Classes** (`models/dataset.py`)
-   - `SecurityCameraDataset`: For batch processing
-   - `StreamDataset`: For real-time streaming
+2. **Model** (`models/model.py`)
+   - `LongTermMemoryAnomalyDetector`: For anomaly detection
+   - `AnomalyTrainer`: For easy Training/Tuning
+   - `YOLOFeatureExtractor`: Extracts features from frames
 
 3. **Storage System** (`utils/storage.py`)
    - Thread-safe anomaly storage
@@ -79,7 +71,7 @@ curl http://localhost:8000/anomalies/stats/summary
 ### Data Flow
 
 ```
-Video Frame → YOLOv8 Feature Extraction → Motion Analysis → Anomaly Detection → Storage
+Video stream → Video Processor. → Feature Extraction → model prediction → Storage -> API
 ```
 
 ## Configuration
@@ -102,50 +94,6 @@ export HOST="0.0.0.0"
 export PORT="8000"
 ```
 
-## WebSocket Usage
-
-Connect to `ws://localhost:8000/ws/video` and send frame data as bytes:
-
-```python
-import websocket
-import cv2
-import numpy as np
-
-def on_message(ws, message):
-    result = json.loads(message)
-    if result['is_anomaly']:
-        print(f"Anomaly detected! Confidence: {result['confidence']}")
-
-ws = websocket.WebSocketApp("ws://localhost:8000/ws/video",
-                          on_message=on_message)
-
-# Send frame
-frame = cv2.imread("test_image.jpg")
-_, buffer = cv2.imencode('.jpg', frame)
-ws.send(buffer.tobytes(), websocket.ABNF.OPCODE_BINARY)
-```
-
-## Dataset Creation
-
-```python
-from models.dataset import SecurityCameraDataset
-
-# Create dataset from video directory
-dataset = SecurityCameraDataset("./path/to/videos")
-
-# Access data
-for i in range(len(dataset)):
-    item = dataset[i]
-    print(f"Image shape: {item['image'].shape}")
-    print(f"Label: {item['label']}")
-```
-
-## Anomaly Types Detected
-
-1. **High Speed Movement**: Objects moving faster than threshold
-2. **High Motion Intensity**: Significant portion of frame in motion
-3. **Object Density**: Too many objects in frame (crowding)
-
 ## API Documentation
 
 Once running, visit `/docs` for interactive API documentation.
@@ -158,7 +106,7 @@ Once running, visit `/docs` for interactive API documentation.
 - **Container Deployment**: Dockerfile ready for containerization
 
 ## Performance Notes
-
+- **MHA + LSTM** : Can be Heavy
 - **YOLOv8s Model**: Good balance of speed and accuracy
 - **Frame Skipping**: Configurable for video processing
 - **Memory Management**: Automatic cleanup of old data
@@ -171,14 +119,14 @@ Once running, visit `/docs` for interactive API documentation.
 ### Project Structure
 ```
 security_camera_anomaly/
-├── main.py                 # FastAPI application
+├── main.py                 
 ├── models/
 │   ├── anomaly_detector.py # Core detection logic
-│   └── dataset.py          # Dataset classes
+│   ├── dataset.py  # Dataset classes
+│   └── model.py   # Model 
 │
 ├── routes/
-│   ├── anomaly.py 
-│   └── stream.py    
+│   └── anomaly.py 
 │
 ├── utils/
 │   ├── video_processing.py  
